@@ -1,4 +1,3 @@
-// src/main.cpp
 #include <ncurses.h>
 #include <vector>
 #include <string>
@@ -11,30 +10,32 @@
 #include "Gate.h"
 #include "ScoreBoard.h"
 
-// 게임 설정
+// 초기 뱀 길이 설정
 static constexpr int INITIAL_SNAKE_LENGTH = 3;
+// 맵에 생성할 아이템 개수
 static constexpr int NUM_ITEMS = 3;
-// static constexpr int FRAME_DELAY_MS = 150;
+// 게이트 생성 간격 (초 단위)
 static int GATE_SPAWN_DELAY_SEC = 10;
-int frameDelayMs = 130; // 과제 구현사항) 새로운 아이템
+// 프레임 지연 시간 (밀리초 단위)
+int frameDelayMs = 130; // 새로운 아이템 관련 설정
 
-// 방향키 → Direction 매핑
+// 키 입력을 Direction으로 변환
 Direction keyToDir(int ch) {
     switch (ch) {
-        case KEY_UP:    return Direction::Up;
-        case KEY_DOWN:  return Direction::Down;
-        case KEY_LEFT:  return Direction::Left;
-        case KEY_RIGHT: return Direction::Right;
-        default:        return Direction::Up; // 기본값(실제 사용 전에 setDirection 호출)
+        case KEY_UP:    return Direction::Up;    // 위 방향
+        case KEY_DOWN:  return Direction::Down;  // 아래 방향
+        case KEY_LEFT:  return Direction::Left;  // 왼쪽 방향
+        case KEY_RIGHT: return Direction::Right; // 오른쪽 방향
+        default:        return Direction::Up;    // 기본값
     }
 }
 
 int main() {
-    setlocale(LC_ALL, "");  // 유니코드 출력을 위해
-    std::srand((unsigned)std::time(nullptr));
+    setlocale(LC_ALL, "");                    // 유니코드 출력 지원
+    std::srand(static_cast<unsigned>(std::time(nullptr))); // 랜덤 시드 초기화
 
-    // 스테이지별 맵 파일 목록
-    std::vector<std::string> levels = { // 여러 스테이지의 추가로 벽에대한 변화를 추가했습니다.
+    // 스테이지별 맵 파일 경로 목록
+    std::vector<std::string> levels = {
         "resources/stage1.txt",
         "resources/stage2.txt",
         "resources/stage3.txt",
@@ -42,132 +43,128 @@ int main() {
     };
 
     // ncurses 초기화
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    nodelay(stdscr, TRUE);
-    curs_set(0);
-    start_color();
-    use_default_colors();
+    initscr();      // 화면 초기화
+    cbreak();       // 라인 버퍼링 비활성화
+    noecho();       // 입력 문자 에코 비활성화
+    keypad(stdscr, TRUE); // 특수키 입력 허용
+    nodelay(stdscr, TRUE); // 논블로킹 입력 모드
+    curs_set(0);    // 커서 숨김
+    start_color();  // 컬러 모드 시작
+    use_default_colors(); // 기본 컬러 사용
 
-    bool quitAll = false;
+    bool quitAll = false; // 전체 게임 종료 플래그
 
-    // 각 스테이지 순회
+    // 각 스테이지 반복
     for (size_t stage = 0; stage < levels.size() && !quitAll; ++stage) {
-        // 맵, 뱀, 아이템, 게이트, 점수판 초기화
+        // 맵과 게임 객체 초기화
         Map map(levels[stage]);
         map.initColors();
         Snake snake(map);
 
-        // 초기 맵에 남아있는 스네이크 셀을 모두 빈 칸으로 지워 준다.
+        // 초깃값으로 맵에 남은 뱀 셀 모두 빈 칸 처리
         for (const auto &seg : snake.getBody()) {
             map.setCell(seg.x, seg.y, Map::EMPTY);
         }
 
+        // 아이템과 게이트, 점수판 생성
         std::vector<Item> items;
         Gate gate(map);
         ScoreBoard board(INITIAL_SNAKE_LENGTH);
         for (int i = 0; i < NUM_ITEMS; ++i)
             items.emplace_back(map, board);
 
-        bool gateSpawned = false;
-        bool gameOver    = false;
-        bool stageClear  = false;
-        std::time_t startTime = std::time(nullptr);
+        bool gateSpawned = false; // 게이트 생성 여부
+        bool gameOver    = false; // 게임 오버 여부
+        bool stageClear  = false; // 스테이지 클리어 여부
+        std::time_t startTime = std::time(nullptr); // 스테이지 시작 시간
 
-        // 메인 루프
+        // 메인 게임 루프
         while (!gameOver && !stageClear) {
-            int ch = getch();
+            int ch = getch(); // 키 입력 읽기
             if (ch == 'q' || ch == 'Q') {
-                quitAll = true;
+                quitAll = true; // 전체 종료
                 break;
             }
+
             // 방향키 입력 처리
             if (ch == KEY_UP || ch == KEY_DOWN || ch == KEY_LEFT || ch == KEY_RIGHT) {
                 snake.setDirection(keyToDir(ch));
             }
 
-            // 이동 전 충돌 예측
+            // 이동 전 충돌 예측: 벽 또는 자기 자신
             if (snake.willHitWall(map) || snake.willHitSelf()) {
                 gameOver = true;
                 break;
             }
 
-            // 뱀 이동
+            // 뱀 이동 (grow=false)
             snake.move(false);
 
-            // 아이템 갱신 및 충돌 처리
+            // 아이템 상태 업데이트 및 충돌 처리
             for (auto &item : items) {
-                item.updateRespawn();
-                bool died = item.checkCollision(snake);
-                if (item.checkCollision(snake)) {
-                    // 독에 의한 사망 체크
-                    if (died) {
-                        gameOver = true;
-                        break;
-                    }
+                item.updateRespawn();    // 재생성 타이밍 처리
+                bool died = item.checkCollision(snake); // 충돌 검사
+                if (died) { // 독 아이템 충돌 시
+                    gameOver = true;
+                    break;
                 }
             }
 
-            if (board.isGameOver()) {
+            // 점수판 기준 게임 오버 체크
+            if (board.isGameOver())
                 break;
-            }
 
-            // 게이트 생성 시점 결정
+            // 게이트 생성 시점 확인
             int elapsedSec = static_cast<int>(std::time(nullptr) - startTime);
             if (!gateSpawned && elapsedSec >= GATE_SPAWN_DELAY_SEC) {
-                gate.generatePair();
+                gate.generatePair();      // 게이트 생성
                 gateSpawned = true;
-                GATE_SPAWN_DELAY_SEC += 10;
+                GATE_SPAWN_DELAY_SEC += 10; // 다음 생성 시간 연장
             }
 
             // 게이트 통과 처리
             Vec2 head = snake.getHead();
             if (gateSpawned && gate.isGate(head)) {
-                // 반대 게이트로 이동
-                Vec2 exit = gate.getOtherGate(head);
-                // Snake 클래스에 warpTo(x,y) 메서드가 필요합니다.
-                snake.warpTo(exit.x, exit.y);
-                // 진출 방향 계산
+                Vec2 exit = gate.getOtherGate(head);         // 반대 게이트 위치
+                snake.warpTo(exit.x, exit.y);               // 위치 워프
                 Direction newDir = gate.computeExitDirection(exit, snake.getDirection());
-                snake.forceDirection(newDir);
-                board.updateGate();
+                snake.forceDirection(newDir);               // 방향 강제 설정
+                board.updateGate();                         // 통과 횟수 증가
             }
 
             // 화면 그리기
-            wchar_t block[] = L"█";
-            clear();
-            map.draw();
-            // Snake Head
+            clear();       // 화면 초기화
+            map.draw();    // 맵 그리기
+
+            // 뱀 머리 그리기
             attron(COLOR_PAIR(7));
             Vec2 h = snake.getHead();
-            mvaddwstr(h.y, h.x, block);
+            mvaddwstr(h.y, h.x, L"█");
             attroff(COLOR_PAIR(7));
 
-            // Snake Body
+            // 뱀 몸통 그리기
+            attron(COLOR_PAIR(8));
             for (auto &seg : snake.getBody()) {
-                if (seg.x == h.x && seg.y == h.y) continue;  // 머리는 이미 찍었으니 제외
-                attron(COLOR_PAIR(8));
-                mvaddwstr(seg.y, seg.x, block);
-                attroff(COLOR_PAIR(8));
+                if (seg.x == h.x && seg.y == h.y) continue; // 머리 제외
+                mvaddwstr(seg.y, seg.x, L"█");
             }
+            attroff(COLOR_PAIR(8));
 
-            // 점수판
-            elapsedSec = static_cast<int>(std::time(nullptr) - startTime);
+            // 점수판 표시
             board.draw(elapsedSec);
+            refresh();    // 화면 업데이트
 
-            refresh();
+            // 프레임 지연
             napms(frameDelayMs);
 
-            // 충돌 후 최종 검사
+            // 최종 충돌 및 미션 완료 검사
             if (snake.isCollision(map))
                 gameOver = true;
             else if (board.checkMission())
                 stageClear = true;
         }
 
-        // 스테이지 결과 메시지
+        // 스테이지 종료 메시지 처리
         clear();
         if (quitAll) {
             mvprintw(Map::HEIGHT/2, Map::WIDTH/2 - 5, "Quit Game");
@@ -179,15 +176,15 @@ int main() {
             nodelay(stdscr, FALSE);
             getch();
             endwin();
-            return 0;    
+            return 0;
         } else if (stageClear) {
             mvprintw(Map::HEIGHT/2, Map::WIDTH/2 - 7, "Stage %d Clear!", stage+1);
             refresh();
-            napms(2000); // 2초 대기 후 다음 스테이지
+            napms(2000); // 2초 대기
         }
     }
 
-    // 전체 클리어 또는 종료 메시지
+    // 모든 스테이지 클리어 또는 종료
     clear();
     if (!quitAll)
         mvprintw(Map::HEIGHT/2, Map::WIDTH/2 - 6, "You Win!");
@@ -195,6 +192,6 @@ int main() {
     nodelay(stdscr, FALSE);
     getch();
 
-    endwin();
+    endwin(); // ncurses 종료
     return 0;
 }

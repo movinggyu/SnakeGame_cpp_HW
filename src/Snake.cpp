@@ -2,7 +2,8 @@
 #include <algorithm>
 #include <stdexcept>
 
-// 생성자: Map에서 SNAKE_HEAD, SNAKE_BODY 찾아 초기 위치 설정
+// 생성자: 맵에서 뱀 머리와 몸통을 찾아 body_ 초기화
+// 이어진 세그먼트를 따라 추가하고, 머리→두 번째 세그먼트 방향의 반대로 dir_ 설정
 Snake::Snake(const Map &map) {
     Vec2 headPos{-1,-1};
     // 머리 위치 탐색
@@ -15,89 +16,75 @@ Snake::Snake(const Map &map) {
         }
         if (headPos.x >= 0) break;
     }
-    if (headPos.x < 0)
-        throw std::runtime_error("맵에 뱀 머리가 없습니다.");
+    if (headPos.x < 0) throw std::runtime_error("맵에 뱀 머리가 없습니다.");
 
-    // 몸통 세그먼트 탐색 및 순서대로 body_에 추가
+    // 첫 세그먼트 추가
     body_.push_back(headPos);
-    Vec2 prev = headPos;
-    Vec2 curr;
-    // 방향 배열 (상, 하, 좌, 우)
+    Vec2 prev = headPos, curr;
     std::vector<Vec2> dirs = {{0,-1},{0,1},{-1,0},{1,0}};
-
-    // 첫 번째 몸통 세그먼트 찾기
     for (auto &d : dirs) {
-        Vec2 p = { headPos.x + d.x, headPos.y + d.y };
+        Vec2 p = {headPos.x + d.x, headPos.y + d.y};
         if (map.getCell(p.x, p.y) == Map::SNAKE_BODY) {
-            curr = p;
-            body_.push_back(curr);
+            curr = p; body_.push_back(curr);
             break;
         }
     }
-    if (body_.size() < 2)
-        throw std::runtime_error("맵에 뱀 몸통이 없습니다.");
+    if (body_.size() < 2) throw std::runtime_error("맵에 뱀 몸통이 없습니다.");
 
-    // 추가 몸통을 순서대로 찾기
+    // 추가 몸통 이어 붙이기
     while (true) {
         bool found = false;
         for (auto &d : dirs) {
-            Vec2 next = { curr.x + d.x, curr.y + d.y };
-            if (next.x == prev.x && next.y == prev.y) continue;
+            Vec2 next = {curr.x + d.x, curr.y + d.y};
+            if (next.x==prev.x && next.y==prev.y) continue;
             if (map.getCell(next.x, next.y) == Map::SNAKE_BODY) {
                 body_.push_back(next);
-                prev = curr; curr = next;
-                found = true;
+                prev = curr; curr = next; found = true;
                 break;
             }
         }
         if (!found) break;
     }
 
-    // 초기 이동 방향 = 머리에서 두 번째 세그먼트를 향하는 반대 방향
-    Vec2 second = body_[1];
-    Vec2 vec = { headPos.x - second.x, headPos.y - second.y };
-    if (vec.x == 1) dir_ = nextDir_ = Direction::Right;
+    // 초기 방향 설정
+    Vec2 sec = body_[1];
+    Vec2 vec = {headPos.x - sec.x, headPos.y - sec.y};
+    if (vec.x == 1)      dir_ = nextDir_ = Direction::Right;
     else if (vec.x == -1) dir_ = nextDir_ = Direction::Left;
-    else if (vec.y == 1) dir_ = nextDir_ = Direction::Down;
-    else dir_ = nextDir_ = Direction::Up;
+    else if (vec.y == 1)  dir_ = nextDir_ = Direction::Down;
+    else                  dir_ = nextDir_ = Direction::Up;
 }
 
-// 키 입력으로 다음 방향 설정
-// 진행 방향의 정반대 입력은 무시
+// setDirection: 반대 방향 입력 시 무시
 void Snake::setDirection(Direction d) {
-    if ((dir_ == Direction::Up    && d == Direction::Down)  ||
-        (dir_ == Direction::Down  && d == Direction::Up)    ||
-        (dir_ == Direction::Left  && d == Direction::Right) ||
-        (dir_ == Direction::Right && d == Direction::Left))
-    {
-        return;
-    }
+    if ((dir_==Direction::Up && d==Direction::Down) ||
+        (dir_==Direction::Down && d==Direction::Up) ||
+        (dir_==Direction::Left && d==Direction::Right) ||
+        (dir_==Direction::Right && d==Direction::Left)) return;
     nextDir_ = d;
 }
 
-// 게이트 워프 이후 진행방향 180도 반대 방향으로도 강제로 바꿔주는 역할
+// forceDirection: 강제 방향 변경 (게이트 워프 후 사용)
 void Snake::forceDirection(Direction d) {
-    dir_     = d;
-    nextDir_ = d;
+    dir_ = nextDir_ = d;
 }
 
-// 한 틱마다 이동 수행
-// grow == true 면 머리 쪽으로 길이 +1, 아니면 꼬리 하나 제거
+// move: nextDir_로 머리 위치 업데이트
+// grow=true 시 꼬리 제거 없이 길이 증가
 void Snake::move(bool grow) {
-    dir_ = nextDir_;               // 실제 이동 방향 갱신
-    Vec2 newHead = body_.front();  // 현재 머리 위치
+    dir_ = nextDir_;
+    Vec2 newHead = body_.front();
     switch (dir_) {
         case Direction::Up:    --newHead.y; break;
         case Direction::Down:  ++newHead.y; break;
         case Direction::Left:  --newHead.x; break;
         case Direction::Right: ++newHead.x; break;
     }
-    body_.push_front(newHead);     // 새 머리 추가
-    body_.pop_back();          // 꼬리 제거
+    body_.push_front(newHead);
+    if (!grow) body_.pop_back();
 }
 
-// 뱀 몸통(deque)의 front 요소(머리)의 좌표를
-// 전달받은 (x, y)로 변경하여 게이트 반대편으로 이동시킨다.
+// warpTo: 머리를 지정 좌표로 이동
 void Snake::warpTo(int x, int y) {
     if (!body_.empty()) {
         body_.front().x = x;
@@ -105,21 +92,18 @@ void Snake::warpTo(int x, int y) {
     }
 }
 
+// grow: 꼬리 끝 복제해 길이 증가 (MAX_LENGTH 제한)
 void Snake::grow() {
-    if (body_.size() >= MAX_LENGTH) return;
-    // 꼬리 끝을 그대로 복제해서 길이 증가
-    body_.push_back(body_.back());
+    if (body_.size() < MAX_LENGTH) body_.push_back(body_.back());
 }
 
-// Poison 아이템 적용: 꼬리 쪽으로 길이 -1
-// 길이 < 3 이면 Game Over (true 반환)
+// shrink: 꼬리 하나 제거, 길이 <3 시 true 반환
 bool Snake::shrink() {
-    if (!body_.empty())
-        body_.pop_back();
-    return (body_.size() < 3);
+    if (!body_.empty()) body_.pop_back();
+    return body_.size() < 3;
 }
 
-// 이동 전, 다음 칸이 벽 또는 면역벽인지 검사
+// willHitWall: nextDir_ 기준 벽 또는 면역벽 충돌 예상 시 true
 bool Snake::willHitWall(const Map &map) const {
     Vec2 next = body_.front();
     switch (nextDir_) {
@@ -129,10 +113,10 @@ bool Snake::willHitWall(const Map &map) const {
         case Direction::Right: ++next.x; break;
     }
     auto cell = map.getCell(next.x, next.y);
-    return (cell == Map::WALL || cell == Map::IMMUNE_WALL);
+    return cell==Map::WALL || cell==Map::IMMUNE_WALL;
 }
 
-// 이동 전, 다음 칸이 자신의 몸과 겹치는지 검사
+// willHitSelf: nextDir_ 기준 몸통과 겹칠 경우 true
 bool Snake::willHitSelf() const {
     Vec2 next = body_.front();
     switch (nextDir_) {
@@ -141,38 +125,22 @@ bool Snake::willHitSelf() const {
         case Direction::Left:  --next.x; break;
         case Direction::Right: ++next.x; break;
     }
-    // 몸통 전체 검사
     return std::any_of(body_.begin(), body_.end(),
-        [&next](const Vec2 &seg){
-            return seg.x == next.x && seg.y == next.y;
-        });
+        [&next](const Vec2 &seg){ return seg.x==next.x && seg.y==next.y; });
 }
 
-// 이동 후, 현재 머리가 벽 또는 자기 몸과 충돌했는지 검사
+// isCollision: 현재 머리 위치 충돌 검사 (벽 또는 자기 몸)
 bool Snake::isCollision(const Map &map) const {
     const Vec2 &head = body_.front();
     auto cell = map.getCell(head.x, head.y);
-    if (cell == Map::WALL || cell == Map::IMMUNE_WALL)
-        return true;
-    // 자기 몸(머리 제외)과의 충돌 검사
-    for (size_t i = 1; i < body_.size(); ++i) {
-        if (body_[i].x == head.x && body_[i].y == head.y)
-            return true;
+    if (cell==Map::WALL || cell==Map::IMMUNE_WALL) return true;
+    for (size_t i=1; i<body_.size(); ++i) {
+        if (body_[i].x==head.x && body_[i].y==head.y) return true;
     }
     return false;
 }
 
-// 현재 머리 위치 반환
-const Vec2 &Snake::getHead() const {
-    return body_.front();
-}
-
-// 몸통 전체 좌표 반환
-const std::deque<Vec2> &Snake::getBody() const {
-    return body_;
-}
-
-// 현재 이동 방향 반환
-Direction Snake::getDirection() const {
-    return dir_;
-}
+// 상태 조회: 머리 좌표, 몸통 전체, 현재 방향
+const Vec2 &Snake::getHead() const { return body_.front(); }
+const std::deque<Vec2> &Snake::getBody() const { return body_; }
+Direction Snake::getDirection() const { return dir_; }
