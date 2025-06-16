@@ -7,7 +7,7 @@ extern int frameDelayMs;
 ScoreBoard::ScoreBoard(int initLength)
     : length_(initLength), maxLength_(initLength),
       growCount_(0), poisonCount_(0), gateCount_(0),
-      targetLength_(4), targetGrow_(0), targetPoison_(0), targetGate_(0)
+      targetLength_(5), targetGrow_(3), targetPoison_(2), targetGate_(1)
 {}
 
 // 성장 아이템 사용 시: 성장 카운트 증가 및 길이 증가

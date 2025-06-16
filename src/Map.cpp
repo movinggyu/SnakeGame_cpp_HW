@@ -73,7 +73,7 @@ void Map::draw() const {
                 case GATE:        pair = 6; break;
                 case SNAKE_HEAD:  pair = 7; break;
                 case SNAKE_BODY:  pair = 8; break;
-                case SPEED_ITEM:  pair = 9; symbol[0] = L'*'; // 과제 구현사항) 새로운 아이템
+                case SPEED_ITEM:  pair = 9; symbol[0] = L'*'; break; // 과제 구현사항) 새로운 아이템
                 default:          pair = 3; break;
             }
             attron(COLOR_PAIR(pair));
