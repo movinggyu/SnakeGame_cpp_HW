@@ -178,6 +178,7 @@ int main() {
             endwin();
             return 0;
         } else if (stageClear) {
+            frameDelayMs = 130;
             mvprintw(Map::HEIGHT/2, Map::WIDTH/2 - 7, "Stage %d Clear!", stage+1);
             refresh();
             napms(2000); // 2초 대기
